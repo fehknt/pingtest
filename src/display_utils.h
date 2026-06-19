@@ -8,7 +8,7 @@
 bool initDisplays();
 
 // Updates the Wide display (Display 1) with time and device status.
-void updateWideDisplay(const String& timeStr, bool isOutage);
+void updateWideDisplay(const String& timeStr, bool isOutage, bool showSquare);
 
 // Updates the Narrow display (Display 2) with the failure point and outage duration.
 // If not in an outage, display is cleared (blank).

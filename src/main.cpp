@@ -2,8 +2,12 @@
 #include <WiFi.h>
 #include <time.h>
 #include <ESP32Ping.h>
+#include <Adafruit_NeoPixel.h>
 
 #include "secrets.h"
+
+#define RGB_BUILTIN 48
+Adafruit_NeoPixel pixels(1, RGB_BUILTIN, NEO_GRB + NEO_KHZ800);
 #include "display_utils.h"
 
 // Define network monitoring states
@@ -34,7 +38,7 @@ unsigned long lastPingTime = 0;
 const unsigned long pingInterval = 60000; // 1 minute
 
 unsigned long lastDisplayTime = 0;
-const unsigned long displayInterval = 1000; // 1 second
+const unsigned long displayInterval = 500; // 500ms for 1Hz blink (on 0.5s, off 0.5s)
 
 // Helper function to ping a target with up to 3 rapid retries on failure
 bool pingWithRetry(const char* host) {
@@ -77,6 +81,10 @@ void setup() {
     delay(1000);
     Serial.println("\n--- ESP32 Network Monitor Starting ---");
 
+    pixels.begin();
+    pixels.clear();
+    pixels.show();
+
     // Initialize Displays
     if (!initDisplays()) {
         Serial.println("[ERROR] Failed to initialize one or both OLED displays!");
@@ -89,7 +97,7 @@ void setup() {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
     // Non-blocking WiFi connection feedback on displays
-    updateWideDisplay("CONNECTING", false);
+    updateWideDisplay("CONNECTING", false, false);
     updateNarrowDisplay("", 0);
 
     int connectionRetries = 0;
@@ -115,6 +123,21 @@ void setup() {
 
 void loop() {
     unsigned long currentMillis = millis();
+
+    // Pulse RGB LED when there is an outage
+    static unsigned long lastPixelUpdate = 0;
+    if (currentMillis - lastPixelUpdate >= 20) {
+        lastPixelUpdate = currentMillis;
+        if (currentState != STATE_OK) {
+            float phase = (currentMillis % 1000) / 1000.0 * 2.0 * PI;
+            int brightness = (int)(((sin(phase - PI/2) + 1.0) / 2.0) * 255.0);
+            pixels.setPixelColor(0, pixels.Color(brightness, 0, 0));
+        } else {
+            // Dim green for OK status (green value: 15)
+            pixels.setPixelColor(0, pixels.Color(0, 15, 0));
+        }
+        pixels.show();
+    }
 
     // 1-minute network check timer
     if (currentMillis - lastPingTime >= pingInterval || lastPingTime == 0) {
@@ -146,7 +169,8 @@ void loop() {
         String timeStr = getLocalTimeStr();
 
         bool isOutage = (currentState != STATE_OK);
-        updateWideDisplay(timeStr, isOutage);
+        bool showSquare = isOutage && ((currentMillis / 500) % 2 == 0);
+        updateWideDisplay(timeStr, isOutage, showSquare);
 
         if (isOutage) {
             String failureLabel = "";

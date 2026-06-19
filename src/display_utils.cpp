@@ -37,7 +37,7 @@ bool initDisplays() {
     return init1 && init2;
 }
 
-void updateWideDisplay(const String& timeStr, bool isOutage) {
+void updateWideDisplay(const String& timeStr, bool isOutage, bool showSquare) {
     display1.clearDisplay();
     display1.setTextColor(SSD1306_WHITE);
     
@@ -53,6 +53,11 @@ void updateWideDisplay(const String& timeStr, bool isOutage) {
         display1.print("STATUS: OUTAGE");
     } else {
         display1.print("STATUS: OK");
+    }
+    
+    // Blinking square heartbeat on the far right (32x32)
+    if (showSquare) {
+        display1.fillRect(128 - 32, 0, 32, 32, SSD1306_WHITE);
     }
     
     display1.display();
