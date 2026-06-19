@@ -35,7 +35,8 @@ String getLocalTimeStr() {
 }
 
 unsigned long lastPingTime = 0;
-const unsigned long pingInterval = 60000; // 1 minute
+const unsigned long normalPingInterval = 60000; // 1 minute
+const unsigned long recoveryPingInterval = 1000; // 1 second
 
 unsigned long lastDisplayTime = 0;
 const unsigned long displayInterval = 500; // 500ms for 1Hz blink (on 0.5s, off 0.5s)
@@ -52,6 +53,36 @@ bool pingWithRetry(const char* host) {
         Serial.println(" Failed.");
     }
     return false;
+}
+
+// Helper function to ping a target exactly once
+bool pingSingle(const char* host) {
+    Serial.printf("[Ping] Fast recovery check for %s...", host);
+    bool success = Ping.ping(host, 1);
+    if (success) {
+        Serial.println(" Success!");
+    } else {
+        Serial.println(" Failed.");
+    }
+    return success;
+}
+
+// Check the status of the specific element that failed
+bool checkSpecificElement(NetworkState state) {
+    switch (state) {
+        case STATE_WIFI_FAIL:
+            return (WiFi.status() == WL_CONNECTED);
+        case STATE_ROUTER_FAIL:
+            return pingSingle(IP_ROUTER);
+        case STATE_MODEM_FAIL:
+            return pingSingle(IP_MODEM);
+        case STATE_ISP_FAIL:
+            return pingSingle(IP_ISP);
+        case STATE_INTERNET_FAIL:
+            return pingSingle(IP_INTERNET);
+        default:
+            return false;
+    }
 }
 
 // Sequence to determine the first point of failure
@@ -139,26 +170,33 @@ void loop() {
         pixels.show();
     }
 
-    // 1-minute network check timer
-    if (currentMillis - lastPingTime >= pingInterval || lastPingTime == 0) {
+    // 1-minute network check or 1-second recovery check timer
+    unsigned long currentPingInterval = (currentState == STATE_OK) ? normalPingInterval : recoveryPingInterval;
+    if (currentMillis - lastPingTime >= currentPingInterval || lastPingTime == 0) {
         lastPingTime = currentMillis;
-        Serial.println("[Monitor] Running scheduled ping tests...");
-        
-        NetworkState nextState = checkNetwork();
-        
-        if (nextState != STATE_OK) {
-            if (currentState == STATE_OK) {
-                // Outage started
+
+        if (currentState == STATE_OK) {
+            Serial.println("[Monitor] Running scheduled ping tests...");
+            NetworkState nextState = checkNetwork();
+            if (nextState != STATE_OK) {
                 outageStartTime = currentMillis;
-                Serial.println("[ALERT] Network outage detected!");
+                Serial.printf("[ALERT] Network outage detected! Failure state: %d\n", nextState);
+                currentState = nextState;
             }
         } else {
-            if (currentState != STATE_OK) {
-                // Network recovered
-                Serial.println("[INFO] Network restored.");
+            // Outage is active; check only the specific failing element
+            if (checkSpecificElement(currentState)) {
+                Serial.println("[Monitor] Specific failed element recovered. Running full verification...");
+                NetworkState nextState = checkNetwork();
+                if (nextState == STATE_OK) {
+                    Serial.println("[INFO] Network fully restored.");
+                    currentState = STATE_OK;
+                } else {
+                    Serial.printf("[Monitor] Element recovered but downstream failure detected. New state: %d\n", nextState);
+                    currentState = nextState;
+                }
             }
         }
-        currentState = nextState;
     }
 
     // 1-second display update timer
