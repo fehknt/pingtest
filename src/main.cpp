@@ -70,8 +70,19 @@ bool pingSingle(const char* host) {
 // Check the status of the specific element that failed
 bool checkSpecificElement(NetworkState state) {
     switch (state) {
-        case STATE_WIFI_FAIL:
-            return (WiFi.status() == WL_CONNECTED);
+        case STATE_WIFI_FAIL: {
+            if (WiFi.status() == WL_CONNECTED) {
+                return true;
+            }
+            static unsigned long lastWiFiRetry = 0;
+            if (millis() - lastWiFiRetry >= 10000 || lastWiFiRetry == 0) {
+                lastWiFiRetry = millis();
+                Serial.println("[WiFi] Actively attempting to reconnect...");
+                WiFi.disconnect();
+                WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            }
+            return false;
+        }
         case STATE_ROUTER_FAIL:
             return pingSingle(IP_ROUTER);
         case STATE_MODEM_FAIL:
