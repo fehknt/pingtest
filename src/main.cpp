@@ -22,6 +22,7 @@ enum NetworkState {
 
 NetworkState currentState = STATE_OK;
 unsigned long outageStartTime = 0;
+unsigned long lastWiFiRetry = 0;
 
 // Helper to get formatted local time HH:MM
 String getLocalTimeStr() {
@@ -74,8 +75,7 @@ bool checkSpecificElement(NetworkState state) {
             if (WiFi.status() == WL_CONNECTED) {
                 return true;
             }
-            static unsigned long lastWiFiRetry = 0;
-            if (millis() - lastWiFiRetry >= 10000 || lastWiFiRetry == 0) {
+            if (millis() - lastWiFiRetry >= 30000) {
                 lastWiFiRetry = millis();
                 Serial.println("[WiFi] Actively attempting to reconnect...");
                 WiFi.disconnect();
@@ -143,7 +143,7 @@ void setup() {
     updateNarrowDisplay("", 0);
 
     int connectionRetries = 0;
-    while (WiFi.status() != WL_CONNECTED && connectionRetries < 20) {
+    while (WiFi.status() != WL_CONNECTED && connectionRetries < 60) {
         delay(500);
         Serial.print(".");
         connectionRetries++;
@@ -161,6 +161,7 @@ void setup() {
     if (currentState != STATE_OK) {
         outageStartTime = millis();
     }
+    lastWiFiRetry = millis();
 }
 
 void loop() {
@@ -191,6 +192,7 @@ void loop() {
             NetworkState nextState = checkNetwork();
             if (nextState != STATE_OK) {
                 outageStartTime = currentMillis;
+                lastWiFiRetry = currentMillis;
                 Serial.printf("[ALERT] Network outage detected! Failure state: %d\n", nextState);
                 currentState = nextState;
             }
