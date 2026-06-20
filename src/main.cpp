@@ -77,8 +77,11 @@ bool checkSpecificElement(NetworkState state) {
             }
             if (millis() - lastWiFiRetry >= 30000) {
                 lastWiFiRetry = millis();
-                Serial.println("[WiFi] Actively attempting to reconnect...");
-                WiFi.disconnect();
+                Serial.println("[WiFi] Actively attempting to reconnect (cycling radio)...");
+                WiFi.disconnect(true); // Erase saved credentials
+                WiFi.mode(WIFI_OFF);   // Turn off WiFi radio completely
+                delay(100);            // Allow hardware to settle
+                WiFi.mode(WIFI_STA);   // Turn radio back on
                 WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
             }
             return false;
@@ -134,8 +137,12 @@ void setup() {
         Serial.println("[OK] OLED displays initialized successfully.");
     }
 
-    // Connect to WiFi
+    // Connect to WiFi (Power cycle radio for clean state)
     Serial.printf("[WiFi] Connecting to SSID: %s\n", WIFI_SSID);
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(100);
+    WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
     // Non-blocking WiFi connection feedback on displays
